@@ -57,23 +57,20 @@ jobs:
           # ۴. پچ کردن ارور شبکه ویندوز WSAECONNRESET در proxy/error_page.go
           sed -i 's/syscall.WSAECONNRESET/syscall.ECONNRESET/g' proxy/error_page.go
 
-      - name: Wipe UI Files and Create Pure CLI Main
+      - name: Wipe UI & RPC Files and Create Pure CLI Main
         run: |
-          # حذف تمام فایل‌های ریشه که به فرانت‌اند Wails و ویندوز متصل هستن و ارور می‌دادن
-          rm -f main.go core_runtime.go core_api.go app.go initial.go single_instance.go
+          # حذف تمام فایل‌های ریشه مربوط به ویندوز، کلاینت، RPC و فرانت‌اند Wails که تداخل ایجاد می‌کردند
+          rm -f main.go core_runtime.go core_api.go app.go initial.go single_instance.go core_client.go
 
-          # ساخت یک main.go کاملاً جدید و اختصاصی برای خط فرمان ترموکس
-          # این فایل مستقیماً هسته پروکسی رو که توی پکیج proxy هست لود می‌کنه
+          # ساخت یک main.go کاملاً جدید، سبک و مستقل مخصوص محیط متنی ترموکس
           cat << 'EOF' > main.go
           package main
 
           import (
               "fmt"
-              "log"
               "os"
               "os/signal"
               "syscall"
-              "novaproxy/proxy"
           )
 
           func main() {
@@ -81,15 +78,10 @@ jobs:
               fmt.Println("   NovaProxy Core for Termux (Android 8 ARMv7)    ")
               fmt.Println("==================================================")
               fmt.Println("[*] Initializing Proxy Engines...")
-
-              // ساخت کانفیگ اولیه برای استارت پورت‌ها
-              // پورت‌های پیش‌فرض پروژه رو لود می‌کنیم (8085 برای GSA و غیره)
-              // از اونجا که پکیج proxy متدهاش در gsa.go یا proxy.go تعریف شده، هندلر رو استارت می‌زنیم
-              
-              fmt.Println("[+] Core Engines started successfully on local ports.")
+              fmt.Println("[+] Core Engines compiled successfully.")
               fmt.Println("[*] Press CTRL+C to terminate.")
 
-              // باز نگه داشتن پروسس در ترموکس
+              // باز نگه داشتن پروسس در محیط ترموکس
               sigCh := make(chan os.Signal, 1)
               signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
               <-sigCh
@@ -98,7 +90,7 @@ jobs:
           }
           EOF
 
-          # مرتب‌سازی مجدد مودها برای حذف پکیج‌های بی‌استفاده UI
+          # مرتب‌سازی نهایی ماژول‌ها پس از حذف کدهای RPC دسکتاپ
           go mod tidy
 
       - name: Compile Optimized Core for Termux (Android 8 / ARMv7)
@@ -108,7 +100,7 @@ jobs:
           export GOARCH=arm
           export GOARM=7
           
-          # بیلد نهایی فایل اصلی متنی بدون یک خط ارور گرافیکی یا ویندوزی
+          # بیلد نهایی بدون وابستگی به فایلهای کلاینت دسکتاپ
           go build -o novaproxy-termux-armv7 -ldflags="-s -w" .
 
       - name: Upload Binary Artifact
