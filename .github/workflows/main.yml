@@ -26,9 +26,9 @@ jobs:
           sed -i '/=>.*\.\//d' go.mod
           go mod tidy
 
-      - name: Patch Windows-Specific Code for Linux/Termux
+      - name: Patch Windows-Specific Code inside Packages
         run: |
-          # ۱. پچ کردن توابع ویندوزی در cert/cert.go و تبدیل آنها به توابع خالی سازگار با لینوکس
+          # ۱. پچ کردن توابع ویندوزی در cert/cert.go
           cat << 'EOF' >> cert/cert.go
 
           // Linux compatibility patches by GitHub Actions Workflow
@@ -41,8 +41,7 @@ jobs:
           # ۲. حل مشکل تابع hideWindow در cert/installer.go
           sed -i 's/hideWindow/func(cmd interface{}){}(nil) \/\/ hideWindow/g' cert/installer.go
 
-          # ۳. غیرفعال کردن کدهای ویندوزی port_manager.go برای لینوکس (چون لینوکس DLL ندارد)
-          # با گذاشتن بومی‌سازیِ لینوکس در بالای فایل
+          # ۳. غیرفعال کردن کدهای ویندوزی port_manager.go برای لینوکس
           echo -e "// +build !windows\n\npackage proxy" > proxy/port_manager.go
           cat << 'EOF' >> proxy/port_manager.go
           import "net"
@@ -56,8 +55,31 @@ jobs:
           EOF
 
           # ۴. پچ کردن ارور شبکه ویندوز WSAECONNRESET در proxy/error_page.go
-          # در لینوکس این ارور وجود ندارد و معادل آن ECONNRESET از پکیج syscall است
           sed -i 's/syscall.WSAECONNRESET/syscall.ECONNRESET/g' proxy/error_page.go
+
+      - name: Create Linux Mock Files for Root Project
+        run: |
+          # ساخت پچ برای توابع گمشده ویندوزی در ریشه پروژه (برای محیط لینوکس/ترموکس)
+          
+          cat << 'EOF' > core_patches_linux.go
+          package main
+
+          import "io"
+
+          // شبیه‌سازی متغیرها و توابع ویندوزی که کامپایلر لینوکس نیاز دارد
+          var externalMihomoManager interface{} = nil
+          var ringLogWriter io.Writer = io.Discard
+          var markerDetail string = ""
+
+          func isProcessElevated() bool {
+              // در لینوکس/ترموکس دسترسی ادمین (روت) با چک کردن UID مشخص میشه، فعلا فرض رو بر معمولی می‌ذاریم
+              return false
+          }
+
+          func writeCoreMarker(detail string) {
+              // تابع مارکر نویسی هسته که روی لینوکس نیازی بهش نیست
+          }
+          EOF
 
       - name: Compile Optimized Core for Termux (Android 8 / ARMv7)
         run: |
@@ -66,7 +88,7 @@ jobs:
           export GOARCH=arm
           export GOARM=7
           
-          # بیلد نهایی پس از جراحی کدهای ویندوز
+          # بیلد نهایی پروژه شامل فایل پچ جدید
           go build -o novaproxy-termux-armv7 -ldflags="-s -w" .
 
       - name: Upload Binary Artifact
