@@ -17,29 +17,27 @@ jobs:
           go-version: 'stable'
           cache: true # فعال‌سازی کش برای افزایش سرعت بیلد
 
-      - name: Fix and Clean go.mod (Remove Windows Paths)
+      - name: Fix and Clean go.mod (Drop Local Replacements)
         run: |
-          # حذف خطوطی که شامل مسیرهای لوکال ویندوزی (مثل C:\ یا D:\) هستند
+          # حذف رپلیسمنت‌های محلی که به فولدرهای ناموجود اشاره می‌کنن (مثل ./utls)
+          go mod edit -dropreplace github.com/refraction-networking/utls
+          
+          # حذف بقیه هدرهای رپلیسمنت محلی احتمالی و مسیرهای لوکال ویندوزی
           sed -i '/=>.*[a-zA-Z]:/d' go.mod
+          sed -i '/=>.*\.\//d' go.mod
           
-          # اطمینان از پاک شدن خط 64 که در بیلد قبلی تداخل ایجاد کرده بود
-          sed -i '64d' go.mod || true
-          
-          # سینک کردن و دانلود مجدد پکیج‌های استاندارد از اینترنت
+          # سینک کردن و دانلود مجدد پکیج‌های استاندارد و رسمی از اینترنت
           go mod tidy
 
       - name: Compile Optimized Core for Termux (Android 8 / ARMv7)
         run: |
-          # CGO_ENABLED=0: بیلد کاملاً مستقل (Statically Linked) بدون نیاز به لایبرری‌های سیستم‌عامل
-          # GOOS=linux: سازگار با ساختار هسته اندروید و لینوکس ترموکس
-          # GOARCH=arm & GOARM=7: تنظیم دقیق معماری برای پردازنده‌های 32 بیتی armv7
-          # -ldflags="-s -w": حذف کامنت‌ها و دیتای دیباگ جهت کاهش حجم فایل و بهینه‌سازی مصرف رم گوشی
-          
+          # تنظیم دقیق معماری برای پردازنده‌های 32 بیتی armv7 و اندروید 8
           export CGO_ENABLED=0
           export GOOS=linux
           export GOARCH=arm
           export GOARM=7
           
+          # بیلد نهایی پروژه با حذف اطلاعات دیباگ برای بهینه‌سازی رم و حجم
           go build -o novaproxy-termux-armv7 -ldflags="-s -w" .
 
       - name: Upload Binary Artifact
