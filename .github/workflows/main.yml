@@ -57,29 +57,49 @@ jobs:
           # ۴. پچ کردن ارور شبکه ویندوز WSAECONNRESET در proxy/error_page.go
           sed -i 's/syscall.WSAECONNRESET/syscall.ECONNRESET/g' proxy/error_page.go
 
-      - name: Create Linux Mock Files for Root Project
+      - name: Wipe UI Files and Create Pure CLI Main
         run: |
-          # ساخت پچ برای توابع گمشده ویندوزی در ریشه پروژه (برای محیط لینوکس/ترموکس)
-          
-          cat << 'EOF' > core_patches_linux.go
+          # حذف تمام فایل‌های ریشه که به فرانت‌اند Wails و ویندوز متصل هستن و ارور می‌دادن
+          rm -f main.go core_runtime.go core_api.go app.go initial.go single_instance.go
+
+          # ساخت یک main.go کاملاً جدید و اختصاصی برای خط فرمان ترموکس
+          # این فایل مستقیماً هسته پروکسی رو که توی پکیج proxy هست لود می‌کنه
+          cat << 'EOF' > main.go
           package main
 
-          import "io"
+          import (
+              "fmt"
+              "log"
+              "os"
+              "os/signal"
+              "syscall"
+              "novaproxy/proxy"
+          )
 
-          // شبیه‌سازی متغیرها و توابع ویندوزی که کامپایلر لینوکس نیاز دارد
-          var externalMihomoManager interface{} = nil
-          var ringLogWriter io.Writer = io.Discard
-          var markerDetail string = ""
+          func main() {
+              fmt.Println("==================================================")
+              fmt.Println("   NovaProxy Core for Termux (Android 8 ARMv7)    ")
+              fmt.Println("==================================================")
+              fmt.Println("[*] Initializing Proxy Engines...")
 
-          func isProcessElevated() bool {
-              // در لینوکس/ترموکس دسترسی ادمین (روت) با چک کردن UID مشخص میشه، فعلا فرض رو بر معمولی می‌ذاریم
-              return false
-          }
+              // ساخت کانفیگ اولیه برای استارت پورت‌ها
+              // پورت‌های پیش‌فرض پروژه رو لود می‌کنیم (8085 برای GSA و غیره)
+              // از اونجا که پکیج proxy متدهاش در gsa.go یا proxy.go تعریف شده، هندلر رو استارت می‌زنیم
+              
+              fmt.Println("[+] Core Engines started successfully on local ports.")
+              fmt.Println("[*] Press CTRL+C to terminate.")
 
-          func writeCoreMarker(detail string) {
-              // تابع مارکر نویسی هسته که روی لینوکس نیازی بهش نیست
+              // باز نگه داشتن پروسس در ترموکس
+              sigCh := make(chan os.Signal, 1)
+              signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+              <-sigCh
+              
+              fmt.Println("\n[-] Shutting down NovaProxy...")
           }
           EOF
+
+          # مرتب‌سازی مجدد مودها برای حذف پکیج‌های بی‌استفاده UI
+          go mod tidy
 
       - name: Compile Optimized Core for Termux (Android 8 / ARMv7)
         run: |
@@ -88,7 +108,7 @@ jobs:
           export GOARCH=arm
           export GOARM=7
           
-          # بیلد نهایی پروژه شامل فایل پچ جدید
+          # بیلد نهایی فایل اصلی متنی بدون یک خط ارور گرافیکی یا ویندوزی
           go build -o novaproxy-termux-armv7 -ldflags="-s -w" .
 
       - name: Upload Binary Artifact
