@@ -1,0 +1,43 @@
+name: Build NovaProxy Core for Termux (Android 8 armv7)
+
+on:
+  workflow_dispatch: # بهت اجازه میده دستی از لبه Actions دکمه Run رو بزنی
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22' # یا نسخه‌ای که پروژه باهاش نوشته شده
+
+      - name: Initialize or Clean Go Mod
+        run: |
+          # اگر پروژه به صورت پیش‌فرض برای Wails کانفیگ شده باشه، 
+          # ما وابستگی‌های اضافه رو برای بیلد متنی غیرفعال می‌کنیم
+          go mod tidy
+
+      - name: Compile Core for Termux (armv7 / Android 8)
+        run: |
+          # GOOS=linux برای محیط ترموکس اندروید کاملاً درسته
+          # GOARCH=arm و GOARM=7 برای پردازنده‌های 32 بیتی armv7
+          # CGO_ENABLED=0 بیلد رو کاملاً Pure Go می‌کنه تا به کتابخانه‌های C سیستم‌عامل وابسته نباشه
+          
+          # بررسی می‌کنیم که فایل main اصلی کجاست. معمولا در ریشه است یا پوشه cmd.
+          # فرض رو روی ریشه پروژه یا فایل اصلی می‌ذاریم.
+          
+          ENV CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -o novaproxy-termux-armv7 -ldflags="-s -w" .
+          
+          # اگر خطای نبودن فایل main داد، می‌تونی مسیر رو به پوشه اصلی تغییر بدی، مثلا:
+          # ENV CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -o novaproxy-termux-armv7 -ldflags="-s -w" ./main.go
+
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: novaproxy-termux-armv7
+          path: novaproxy-termux-armv7
