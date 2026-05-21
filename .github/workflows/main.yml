@@ -57,10 +57,13 @@ jobs:
           # ۴. پچ کردن ارور شبکه ویندوز WSAECONNRESET در proxy/error_page.go
           sed -i 's/syscall.WSAECONNRESET/syscall.ECONNRESET/g' proxy/error_page.go
 
-      - name: Wipe UI & RPC Files and Create Pure CLI Main
+      - name: Wipe UI, RPC and Windows .syso Files
         run: |
-          # حذف تمام فایل‌های ریشه مربوط به ویندوز، کلاینت، RPC و فرانت‌اند Wails که تداخل ایجاد می‌کردند
+          # حذف تمام فایل‌های دسکتاپ و فرانت‌اند
           rm -f main.go core_runtime.go core_api.go app.go initial.go single_instance.go core_client.go
+          
+          # حذف فایل‌های سیستمی و ریسورس ویندوز (.syso) که باعث تداخل معماری پردازنده می‌شدند
+          rm -f *.syso
 
           # ساخت یک main.go کاملاً جدید، سبک و مستقل مخصوص محیط متنی ترموکس
           cat << 'EOF' > main.go
@@ -90,7 +93,7 @@ jobs:
           }
           EOF
 
-          # مرتب‌سازی نهایی ماژول‌ها پس از حذف کدهای RPC دسکتاپ
+          # مرتب‌سازی نهایی ماژول‌ها
           go mod tidy
 
       - name: Compile Optimized Core for Termux (Android 8 / ARMv7)
@@ -100,7 +103,7 @@ jobs:
           export GOARCH=arm
           export GOARM=7
           
-          # بیلد نهایی بدون وابستگی به فایلهای کلاینت دسکتاپ
+          # بیلد نهایی بدون فایلهای ریسورس دسکتاپ
           go build -o novaproxy-termux-armv7 -ldflags="-s -w" .
 
       - name: Upload Binary Artifact
