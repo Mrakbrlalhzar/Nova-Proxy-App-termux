@@ -1,7 +1,7 @@
 name: Build NovaProxy Core for Termux (Android 8 armv7)
 
 on:
-  workflow_dispatch: # اجرای دستی از تب Actions
+  workflow_dispatch:
 
 jobs:
   build:
@@ -15,35 +15,58 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: 'stable'
-          cache: true # فعال‌سازی کش برای افزایش سرعت بیلد
+          cache: true
 
       - name: Hard Fix go.mod (Text-based Cleanup)
         run: |
-          # ۱. اول به صورت متنی تمام خطوطی که مسیرهای ویندوزی دارن (مثل C:\ یا D:\) رو کاملاً حذف کن
           sed -i '/[a-zA-Z]:\\/d' go.mod
           sed -i '/=>.*[a-zA-Z]:/d' go.mod
-          
-          # ۲. خط ۶۴ رو هم برای اطمینان مجدد به صورت دستی پاک کن
           sed -i '64d' go.mod || true
-          
-          # ۳. حالا که فایل متنی تمیز شد و ابزار go دیگه کرش نمی‌کنه، رپلیسمنت utls رو حذف کن
           go mod edit -dropreplace github.com/refraction-networking/utls || true
-          
-          # ۴. هر رپلیسمنت دیگه‌ای که به فولدرهای لوکال اشاره می‌کنه رو هم پاک کن
           sed -i '/=>.*\.\//d' go.mod
-          
-          # ۵. در نهایت پکیج‌های رسمی رو از اینترنت دانلود و فایل رو مرتب کن
           go mod tidy
+
+      - name: Patch Windows-Specific Code for Linux/Termux
+        run: |
+          # ۱. پچ کردن توابع ویندوزی در cert/cert.go و تبدیل آنها به توابع خالی سازگار با لینوکس
+          cat << 'EOF' >> cert/cert.go
+
+          // Linux compatibility patches by GitHub Actions Workflow
+          func outputHiddenCommand(name string, arg ...string) ([]byte, error) { return nil, nil }
+          func runHiddenCommand(name string, arg ...string) error { return nil }
+          func runElevatedCommand(name string, arg ...string) error { return nil }
+          func startVisibleCommand(name string, arg ...string) error { return nil }
+          EOF
+
+          # ۲. حل مشکل تابع hideWindow در cert/installer.go
+          sed -i 's/hideWindow/func(cmd interface{}){}(nil) \/\/ hideWindow/g' cert/installer.go
+
+          # ۳. غیرفعال کردن کدهای ویندوزی port_manager.go برای لینوکس (چون لینوکس DLL ندارد)
+          # با گذاشتن بومی‌سازیِ لینوکس در بالای فایل
+          echo -e "// +build !windows\n\npackage proxy" > proxy/port_manager.go
+          cat << 'EOF' >> proxy/port_manager.go
+          import "net"
+          func checkPortAndKill(port string) {}
+          func isPortOpen(port string) bool {
+              ln, err := net.Listen("tcp", ":"+port)
+              if err != nil { return false }
+              ln.Close()
+              return true
+          }
+          EOF
+
+          # ۴. پچ کردن ارور شبکه ویندوز WSAECONNRESET در proxy/error_page.go
+          # در لینوکس این ارور وجود ندارد و معادل آن ECONNRESET از پکیج syscall است
+          sed -i 's/syscall.WSAECONNRESET/syscall.ECONNRESET/g' proxy/error_page.go
 
       - name: Compile Optimized Core for Termux (Android 8 / ARMv7)
         run: |
-          # تنظیم معماری ۳۲ بیتی برای اندروید ۸ ترموکس
           export CGO_ENABLED=0
           export GOOS=linux
           export GOARCH=arm
           export GOARM=7
           
-          # بیلد و بهینه‌سازی حجم فایل
+          # بیلد نهایی پس از جراحی کدهای ویندوز
           go build -o novaproxy-termux-armv7 -ldflags="-s -w" .
 
       - name: Upload Binary Artifact
